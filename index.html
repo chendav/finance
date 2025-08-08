@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>家庭理财小助手</title>
     <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+    <script src="https://cdn.jsdelivr.net/npm/d3-sankey@0.12"></script>
 </head>
 <body>
     <div class="container">
@@ -120,6 +122,13 @@
                     
                     <div class="assets-list" id="assets-list">
                         <!-- 资产列表将通过JavaScript动态生成 -->
+                    </div>
+                </section>
+
+                <section class="sankey-chart">
+                    <h2>资产流动性桑基图</h2>
+                    <div id="sankey-container">
+                        <svg id="sankey-svg"></svg>
                     </div>
                 </section>
             </div>

@@ -19,6 +19,7 @@ class FinanceApp {
         this.renderAssets();
         this.updateSummary();
         this.updateBalanceSheet();
+        this.renderSankeyChart();
     }
     
     setupEventListeners() {
@@ -140,6 +141,7 @@ class FinanceApp {
         this.saveAssets();
         this.renderAssets();
         this.updateBalanceSheet();
+        this.renderSankeyChart();
         form.reset();
     }
     
@@ -149,6 +151,7 @@ class FinanceApp {
             this.saveAssets();
             this.renderAssets();
             this.updateBalanceSheet();
+            this.renderSankeyChart();
         }
     }
     
@@ -261,6 +264,277 @@ class FinanceApp {
     
     saveAssets() {
         localStorage.setItem('financeAssets', JSON.stringify(this.assets));
+    }
+    
+    renderSankeyChart() {
+        if (typeof d3 === 'undefined' || typeof d3.sankey === 'undefined') {
+            console.warn('D3.js 或 d3-sankey 未加载');
+            return;
+        }
+        
+        const sankeyData = this.prepareSankeyData();
+        if (!sankeyData.nodes.length || !sankeyData.links.length) {
+            this.clearSankeyChart();
+            return;
+        }
+        
+        const svg = d3.select('#sankey-svg');
+        svg.selectAll('*').remove();
+        
+        const container = document.getElementById('sankey-container');
+        const width = container.clientWidth;
+        const height = container.clientHeight;
+        const margin = { top: 20, right: 20, bottom: 20, left: 20 };
+        
+        const chartWidth = width - margin.left - margin.right;
+        const chartHeight = height - margin.top - margin.bottom;
+        
+        const sankey = d3.sankey()
+            .nodeWidth(20)
+            .nodePadding(20)
+            .extent([[margin.left, margin.top], [chartWidth, chartHeight]]);
+        
+        const { nodes, links } = sankey(sankeyData);
+        
+        const g = svg.append('g');
+        
+        // 创建颜色比例
+        const colorScale = d3.scaleOrdinal()
+            .domain(['高流动性', '中流动性', '低流动性', '负债'])
+            .range(['#4caf50', '#ff9800', '#2196f3', '#f44336']);
+        
+        // 绘制连接线
+        g.append('g')
+            .selectAll('.sankey-link')
+            .data(links)
+            .enter()
+            .append('path')
+            .attr('class', 'sankey-link')
+            .attr('d', d3.sankeyLinkHorizontal())
+            .attr('stroke', d => colorScale(d.source.category))
+            .attr('stroke-width', d => Math.max(1, d.width))
+            .on('mouseover', (event, d) => {
+                this.showTooltip(event, `${d.source.name} → ${d.target.name}: ¥${d.value.toFixed(2)}`);
+            })
+            .on('mouseout', () => {
+                this.hideTooltip();
+            });
+        
+        // 绘制节点
+        const node = g.append('g')
+            .selectAll('.sankey-node')
+            .data(nodes)
+            .enter()
+            .append('g')
+            .attr('class', 'sankey-node');
+        
+        node.append('rect')
+            .attr('x', d => d.x0)
+            .attr('y', d => d.y0)
+            .attr('height', d => d.y1 - d.y0)
+            .attr('width', d => d.x1 - d.x0)
+            .attr('fill', d => colorScale(d.category))
+            .on('mouseover', (event, d) => {
+                this.showTooltip(event, `${d.name}: ¥${d.value.toFixed(2)}`);
+            })
+            .on('mouseout', () => {
+                this.hideTooltip();
+            });
+        
+        node.append('text')
+            .attr('x', d => d.x0 < chartWidth / 2 ? d.x1 + 6 : d.x0 - 6)
+            .attr('y', d => (d.y1 + d.y0) / 2)
+            .attr('dy', '0.35em')
+            .attr('text-anchor', d => d.x0 < chartWidth / 2 ? 'start' : 'end')
+            .text(d => d.name);
+        
+        this.renderSankeyLegend();
+    }
+    
+    prepareSankeyData() {
+        const nodes = [];
+        const links = [];
+        
+        // 流动性分类
+        const liquidityCategories = {
+            cash: { name: '高流动性', category: '高流动性' },
+            deposit: { name: '中流动性', category: '中流动性' },
+            investment: { name: '低流动性', category: '低流动性' },
+            property: { name: '低流动性', category: '低流动性' },
+            debt: { name: '负债', category: '负债' }
+        };
+        
+        // 添加流动性分类节点
+        const categoryNodes = new Map();
+        Object.values(liquidityCategories).forEach(cat => {
+            if (!categoryNodes.has(cat.name)) {
+                categoryNodes.set(cat.name, {
+                    name: cat.name,
+                    category: cat.category,
+                    value: 0
+                });
+            }
+        });
+        
+        // 添加净资产节点
+        const netWorthNode = {
+            name: '净资产',
+            category: '净资产',
+            value: 0
+        };
+        
+        // 处理资产数据
+        this.assets.forEach(asset => {
+            const assetCategory = liquidityCategories[asset.type];
+            if (assetCategory) {
+                // 添加具体资产节点
+                nodes.push({
+                    name: asset.name,
+                    category: assetCategory.category,
+                    value: asset.value
+                });
+                
+                // 更新分类节点的值
+                const categoryNode = categoryNodes.get(assetCategory.name);
+                categoryNode.value += asset.value;
+                
+                if (asset.type !== 'debt') {
+                    // 资产到分类的连接
+                    links.push({
+                        source: nodes.length - 1,
+                        target: assetCategory.name,
+                        value: asset.value
+                    });
+                    
+                    netWorthNode.value += asset.value;
+                } else {
+                    // 负债的处理
+                    links.push({
+                        source: nodes.length - 1,
+                        target: assetCategory.name,
+                        value: asset.value
+                    });
+                    
+                    netWorthNode.value -= asset.value;
+                }
+            }
+        });
+        
+        // 添加分类节点到节点数组
+        categoryNodes.forEach(node => {
+            nodes.push(node);
+        });
+        
+        // 添加净资产节点
+        nodes.push(netWorthNode);
+        
+        // 创建从分类到净资产的连接
+        categoryNodes.forEach((categoryNode, categoryName) => {
+            if (categoryNode.value > 0) {
+                const categoryIndex = nodes.findIndex(n => n.name === categoryName);
+                const netWorthIndex = nodes.findIndex(n => n.name === '净资产');
+                
+                if (categoryName === '负债') {
+                    // 负债以负值影响净资产
+                    links.push({
+                        source: categoryIndex,
+                        target: netWorthIndex,
+                        value: categoryNode.value
+                    });
+                } else {
+                    // 资产以正值影响净资产
+                    links.push({
+                        source: categoryIndex,
+                        target: netWorthIndex,
+                        value: categoryNode.value
+                    });
+                }
+            }
+        });
+        
+        // 将字符串索引转换为数字索引
+        const nodeNameToIndex = new Map();
+        nodes.forEach((node, index) => {
+            nodeNameToIndex.set(node.name, index);
+        });
+        
+        links.forEach(link => {
+            if (typeof link.source === 'string') {
+                link.source = nodeNameToIndex.get(link.source);
+            }
+            if (typeof link.target === 'string') {
+                link.target = nodeNameToIndex.get(link.target);
+            }
+        });
+        
+        return { nodes, links };
+    }
+    
+    renderSankeyLegend() {
+        const container = document.querySelector('.sankey-chart');
+        let legend = container.querySelector('.sankey-legend');
+        
+        if (!legend) {
+            legend = document.createElement('div');
+            legend.className = 'sankey-legend';
+            container.appendChild(legend);
+        }
+        
+        const legendData = [
+            { name: '高流动性', color: '#4caf50' },
+            { name: '中流动性', color: '#ff9800' },
+            { name: '低流动性', color: '#2196f3' },
+            { name: '负债', color: '#f44336' }
+        ];
+        
+        legend.innerHTML = legendData.map(item => `
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: ${item.color}"></div>
+                <span>${item.name}</span>
+            </div>
+        `).join('');
+    }
+    
+    clearSankeyChart() {
+        const svg = d3.select('#sankey-svg');
+        svg.selectAll('*').remove();
+        
+        const container = document.querySelector('.sankey-chart');
+        const legend = container.querySelector('.sankey-legend');
+        if (legend) {
+            legend.remove();
+        }
+        
+        // 显示提示信息
+        svg.append('text')
+            .attr('x', '50%')
+            .attr('y', '50%')
+            .attr('text-anchor', 'middle')
+            .attr('dominant-baseline', 'middle')
+            .style('fill', '#666')
+            .style('font-size', '16px')
+            .text('请先添加资产数据');
+    }
+    
+    showTooltip(event, text) {
+        let tooltip = document.querySelector('.sankey-tooltip');
+        if (!tooltip) {
+            tooltip = document.createElement('div');
+            tooltip.className = 'sankey-tooltip';
+            document.body.appendChild(tooltip);
+        }
+        
+        tooltip.innerHTML = text;
+        tooltip.style.left = (event.pageX + 10) + 'px';
+        tooltip.style.top = (event.pageY - 10) + 'px';
+        tooltip.style.opacity = '1';
+    }
+    
+    hideTooltip() {
+        const tooltip = document.querySelector('.sankey-tooltip');
+        if (tooltip) {
+            tooltip.style.opacity = '0';
+        }
     }
 }
 
