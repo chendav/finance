@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>家庭理财小助手</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>家庭理财小助手</h1>
+            <nav>
+                <button class="tab-button active" data-tab="accounting">记账</button>
+                <button class="tab-button" data-tab="assets">资产负债表</button>
+            </nav>
+        </header>
+
+        <main>
+            <!-- 记账模块 -->
+            <div id="accounting" class="tab-content active">
+                <section class="add-record">
+                    <h2>添加记录</h2>
+                    <form id="record-form">
+                        <div class="form-group">
+                            <label for="type">类型</label>
+                            <select id="type" required>
+                                <option value="income">收入</option>
+                                <option value="expense">支出</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="category">分类</label>
+                            <select id="category" required>
+                                <option value="">请选择分类</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="amount">金额</label>
+                            <input type="number" id="amount" step="0.01" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="description">描述</label>
+                            <input type="text" id="description">
+                        </div>
+                        <div class="form-group">
+                            <label for="date">日期</label>
+                            <input type="date" id="date" required>
+                        </div>
+                        <button type="submit">添加记录</button>
+                    </form>
+                </section>
+
+                <section class="summary">
+                    <div class="summary-item">
+                        <span class="label">本月收入:</span>
+                        <span class="income" id="monthly-income">¥0.00</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="label">本月支出:</span>
+                        <span class="expense" id="monthly-expense">¥0.00</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="label">本月净收入:</span>
+                        <span id="monthly-net">¥0.00</span>
+                    </div>
+                </section>
+
+                <section class="records">
+                    <h2>记录列表</h2>
+                    <div class="records-list" id="records-list">
+                        <!-- 记录列表将通过JavaScript动态生成 -->
+                    </div>
+                </section>
+            </div>
+
+            <!-- 资产负债表模块 -->
+            <div id="assets" class="tab-content">
+                <section class="asset-form">
+                    <h2>资产管理</h2>
+                    <form id="asset-form">
+                        <div class="form-group">
+                            <label for="asset-type">类型</label>
+                            <select id="asset-type" required>
+                                <option value="cash">现金</option>
+                                <option value="deposit">银行存款</option>
+                                <option value="investment">投资</option>
+                                <option value="property">房产</option>
+                                <option value="debt">负债</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="asset-name">名称</label>
+                            <input type="text" id="asset-name" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="asset-value">金额</label>
+                            <input type="number" id="asset-value" step="0.01" required>
+                        </div>
+                        <button type="submit">添加/更新</button>
+                    </form>
+                </section>
+
+                <section class="balance-sheet">
+                    <h2>资产负债表</h2>
+                    <div class="balance-summary">
+                        <div class="summary-item">
+                            <span class="label">总资产:</span>
+                            <span class="income" id="total-assets">¥0.00</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="label">总负债:</span>
+                            <span class="expense" id="total-debt">¥0.00</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="label">净资产:</span>
+                            <span id="net-worth">¥0.00</span>
+                        </div>
+                    </div>
+                    
+                    <div class="assets-list" id="assets-list">
+                        <!-- 资产列表将通过JavaScript动态生成 -->
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
