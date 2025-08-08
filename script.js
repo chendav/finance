@@ -298,10 +298,10 @@ class FinanceApp {
         
         const g = svg.append('g');
         
-        // 创建颜色比例
-        const colorScale = d3.scaleOrdinal()
-            .domain(['高流动性', '中流动性', '低流动性', '负债'])
-            .range(['#4caf50', '#ff9800', '#2196f3', '#f44336']);
+        // 使用节点自带的颜色
+        const getNodeColor = (node) => {
+            return node.color || '#9E9E9E';
+        };
         
         // 绘制连接线
         g.append('g')
@@ -311,7 +311,7 @@ class FinanceApp {
             .append('path')
             .attr('class', 'sankey-link')
             .attr('d', d3.sankeyLinkHorizontal())
-            .attr('stroke', d => colorScale(d.source.category))
+            .attr('stroke', d => getNodeColor(d.source))
             .attr('stroke-width', d => Math.max(1, d.width))
             .on('mouseover', (event, d) => {
                 this.showTooltip(event, `${d.source.name} → ${d.target.name}: ¥${d.value.toFixed(2)}`);
@@ -333,7 +333,7 @@ class FinanceApp {
             .attr('y', d => d.y0)
             .attr('height', d => d.y1 - d.y0)
             .attr('width', d => d.x1 - d.x0)
-            .attr('fill', d => colorScale(d.category))
+            .attr('fill', d => getNodeColor(d))
             .on('mouseover', (event, d) => {
                 this.showTooltip(event, `${d.name}: ¥${d.value.toFixed(2)}`);
             })
@@ -355,115 +355,154 @@ class FinanceApp {
         const nodes = [];
         const links = [];
         
-        // 流动性分类
-        const liquidityCategories = {
-            cash: { name: '高流动性', category: '高流动性' },
-            deposit: { name: '中流动性', category: '中流动性' },
-            investment: { name: '低流动性', category: '低流动性' },
-            property: { name: '低流动性', category: '低流动性' },
-            debt: { name: '负债', category: '负债' }
+        // 资产大类分类（参考专业资产配置）
+        const assetCategories = {
+            cash: { name: '现金资产', category: '现金资产', color: '#81C784' },
+            deposit: { name: '银行存款', category: '银行存款', color: '#64B5F6' },
+            investment: { name: '投资资产', category: '投资资产', color: '#FFB74D' },
+            property: { name: '不动产', category: '不动产', color: '#A1887F' },
+            debt: { name: '负债', category: '负债', color: '#E57373' }
         };
         
-        // 添加流动性分类节点
+        // 添加总资产节点（左侧起点）
+        const totalAssetsNode = {
+            name: '家庭总资产',
+            category: '总资产',
+            value: 0,
+            color: '#9C27B0'
+        };
+        
+        // 计算总资产价值
+        const totalAssetValue = this.assets
+            .filter(asset => asset.type !== 'debt')
+            .reduce((sum, asset) => sum + asset.value, 0);
+        
+        const totalDebtValue = this.assets
+            .filter(asset => asset.type === 'debt')
+            .reduce((sum, asset) => sum + asset.value, 0);
+        
+        totalAssetsNode.value = totalAssetValue;
+        nodes.push(totalAssetsNode);
+        
+        // 添加资产大类节点（中间分类层）
         const categoryNodes = new Map();
-        Object.values(liquidityCategories).forEach(cat => {
-            if (!categoryNodes.has(cat.name)) {
-                categoryNodes.set(cat.name, {
-                    name: cat.name,
-                    category: cat.category,
-                    value: 0
-                });
-            }
+        Object.values(assetCategories).forEach(cat => {
+            categoryNodes.set(cat.name, {
+                name: cat.name,
+                category: cat.category,
+                value: 0,
+                color: cat.color
+            });
         });
         
-        // 添加净资产节点
-        const netWorthNode = {
-            name: '净资产',
-            category: '净资产',
-            value: 0
-        };
-        
-        // 处理资产数据
+        // 处理具体资产项目（右侧明细）
         this.assets.forEach(asset => {
-            const assetCategory = liquidityCategories[asset.type];
+            const assetCategory = assetCategories[asset.type];
             if (assetCategory) {
                 // 添加具体资产节点
                 nodes.push({
                     name: asset.name,
-                    category: assetCategory.category,
-                    value: asset.value
+                    category: `${assetCategory.category}明细`,
+                    value: asset.value,
+                    color: assetCategory.color,
+                    assetType: asset.type
                 });
                 
                 // 更新分类节点的值
                 const categoryNode = categoryNodes.get(assetCategory.name);
                 categoryNode.value += asset.value;
-                
-                if (asset.type !== 'debt') {
-                    // 资产到分类的连接
-                    links.push({
-                        source: nodes.length - 1,
-                        target: assetCategory.name,
-                        value: asset.value
-                    });
-                    
-                    netWorthNode.value += asset.value;
-                } else {
-                    // 负债的处理
-                    links.push({
-                        source: nodes.length - 1,
-                        target: assetCategory.name,
-                        value: asset.value
-                    });
-                    
-                    netWorthNode.value -= asset.value;
-                }
             }
         });
         
-        // 添加分类节点到节点数组
+        // 添加非零的分类节点
         categoryNodes.forEach(node => {
-            nodes.push(node);
+            if (node.value > 0) {
+                nodes.push(node);
+            }
         });
         
-        // 添加净资产节点
+        // 添加净资产节点（最终结果）
+        const netWorthNode = {
+            name: '净资产',
+            category: '净资产',
+            value: totalAssetValue - totalDebtValue,
+            color: totalAssetValue - totalDebtValue >= 0 ? '#4CAF50' : '#F44336'
+        };
         nodes.push(netWorthNode);
         
-        // 创建从分类到净资产的连接
-        categoryNodes.forEach((categoryNode, categoryName) => {
-            if (categoryNode.value > 0) {
-                const categoryIndex = nodes.findIndex(n => n.name === categoryName);
-                const netWorthIndex = nodes.findIndex(n => n.name === '净资产');
-                
-                if (categoryName === '负债') {
-                    // 负债以负值影响净资产
-                    links.push({
-                        source: categoryIndex,
-                        target: netWorthIndex,
-                        value: categoryNode.value
-                    });
-                } else {
-                    // 资产以正值影响净资产
-                    links.push({
-                        source: categoryIndex,
-                        target: netWorthIndex,
-                        value: categoryNode.value
-                    });
-                }
-            }
-        });
-        
-        // 将字符串索引转换为数字索引
+        // 创建连接关系
         const nodeNameToIndex = new Map();
         nodes.forEach((node, index) => {
             nodeNameToIndex.set(node.name, index);
         });
         
-        links.forEach(link => {
-            if (typeof link.source === 'string') {
-                link.source = nodeNameToIndex.get(link.source);
+        // 1. 总资产到各大类的连接
+        categoryNodes.forEach((categoryNode, categoryName) => {
+            if (categoryNode.value > 0 && categoryNode.category !== '负债') {
+                const totalIndex = nodeNameToIndex.get('家庭总资产');
+                const categoryIndex = nodeNameToIndex.get(categoryName);
+                
+                if (totalIndex !== undefined && categoryIndex !== undefined) {
+                    links.push({
+                        source: totalIndex,
+                        target: categoryIndex,
+                        value: categoryNode.value
+                    });
+                }
             }
-            if (typeof link.target === 'string') {
-                link.target = nodeNameToIndex.get(link.target);
+        });
+        
+        // 2. 各大类到具体资产项目的连接
+        this.assets.forEach(asset => {
+            const assetCategory = assetCategories[asset.type];
+            if (assetCategory && asset.type !== 'debt') {
+                const categoryIndex = nodeNameToIndex.get(assetCategory.name);
+                const assetIndex = nodeNameToIndex.get(asset.name);
+                
+                if (categoryIndex !== undefined && assetIndex !== undefined) {
+                    links.push({
+                        source: categoryIndex,
+                        target: assetIndex,
+                        value: asset.value
+                    });
+                }
+            }
+        });
+        
+        // 3. 处理负债（直接影响净资产）
+        this.assets.forEach(asset => {
+            if (asset.type === 'debt') {
+                const assetIndex = nodeNameToIndex.get(asset.name);
+                const netWorthIndex = nodeNameToIndex.get('净资产');
+                
+                if (assetIndex !== undefined && netWorthIndex !== undefined) {
+                    links.push({
+                        source: assetIndex,
+                        target: netWorthIndex,
+                        value: asset.value
+                    });
+                }
+            }
+        });
+        
+        // 4. 各资产类别汇总到净资产
+        categoryNodes.forEach((categoryNode, categoryName) => {
+            if (categoryNode.value > 0 && categoryNode.category !== '负债') {
+                // 找到该类别下的所有具体资产，从这些资产连接到净资产
+                this.assets
+                    .filter(asset => assetCategories[asset.type]?.name === categoryName)
+                    .forEach(asset => {
+                        const assetIndex = nodeNameToIndex.get(asset.name);
+                        const netWorthIndex = nodeNameToIndex.get('净资产');
+                        
+                        if (assetIndex !== undefined && netWorthIndex !== undefined) {
+                            links.push({
+                                source: assetIndex,
+                                target: netWorthIndex,
+                                value: asset.value
+                            });
+                        }
+                    });
             }
         });
         
@@ -481,10 +520,12 @@ class FinanceApp {
         }
         
         const legendData = [
-            { name: '高流动性', color: '#4caf50' },
-            { name: '中流动性', color: '#ff9800' },
-            { name: '低流动性', color: '#2196f3' },
-            { name: '负债', color: '#f44336' }
+            { name: '总资产', color: '#9C27B0' },
+            { name: '现金资产', color: '#81C784' },
+            { name: '银行存款', color: '#64B5F6' },
+            { name: '投资资产', color: '#FFB74D' },
+            { name: '不动产', color: '#A1887F' },
+            { name: '负债', color: '#E57373' }
         ];
         
         legend.innerHTML = legendData.map(item => `
